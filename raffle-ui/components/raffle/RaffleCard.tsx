@@ -1,5 +1,6 @@
 'use client'
 import { formatEther } from 'viem'
+import { useEffect } from 'react'
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { RAFFLE_ADDRESS, RAFFLE_ABI } from '@/lib/contract'
 import { ZERO } from '@/lib/utils'
@@ -35,17 +36,17 @@ export function RaffleCard({
   /* ── Enter ─────────────────────────────────────────────────── */
   const { writeContract: enterWrite, data: enterHash, isPending: enterPending } = useWriteContract()
   const { isLoading: enterConfirming, isSuccess: enterSuccess } = useWaitForTransactionReceipt({ hash: enterHash })
-  if (enterSuccess) { showToast('🎉 You entered!', 'success'); onSuccess() }
+  useEffect(() => { if (enterSuccess) { showToast('🎉 You entered!', 'success'); onSuccess() } }, [enterSuccess]) // eslint-disable-line
 
   /* ── Claim winnings ─────────────────────────────────────────── */
   const { writeContract: claimWrite, data: claimHash, isPending: claimPending } = useWriteContract()
   const { isSuccess: claimSuccess } = useWaitForTransactionReceipt({ hash: claimHash })
-  if (claimSuccess) { showToast('💰 Prize claimed!', 'success'); onSuccess() }
+  useEffect(() => { if (claimSuccess) { showToast('💰 Prize claimed!', 'success'); onSuccess() } }, [claimSuccess]) // eslint-disable-line
 
   /* ── Claim refund ───────────────────────────────────────────── */
   const { writeContract: refundWrite, data: refundHash, isPending: refundPending } = useWriteContract()
   const { isSuccess: refundSuccess } = useWaitForTransactionReceipt({ hash: refundHash })
-  if (refundSuccess) { showToast('↩️ Refund claimed!', 'success'); onSuccess() }
+  useEffect(() => { if (refundSuccess) { showToast('↩️ Refund claimed!', 'success'); onSuccess() } }, [refundSuccess]) // eslint-disable-line
 
   const isBusy   = enterPending || enterConfirming
   const canEnter = isConnected && raffleState === 0 && !isPaused && !hasEntered && !isBusy
