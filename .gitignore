@@ -22,3 +22,5 @@ docs/
 # IDE
 .idea/
 .vscode/
+
+!raffle-ui/lib
