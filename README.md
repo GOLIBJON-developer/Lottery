@@ -8,7 +8,7 @@
 [![Tests](https://img.shields.io/badge/Tests-98%20passing-2ECC71?style=for-the-badge)](#testing)
 [![Tests](https://github.com/GOLIBJON-developer/lottery/actions/workflows/test.yml/badge.svg)](https://github.com/GOLIBJON-developer/lottery/actions/workflows/test.yml)
 
-**Live:** https://raffle-mod.netlify.app/   '      '  https://raffle-mod.vercel.app/
+**Live:** https://raffle-mod.netlify.app/                              https://raffle-mod.vercel.app/
 **Contract:** [`0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4`](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4)
 
 ---
