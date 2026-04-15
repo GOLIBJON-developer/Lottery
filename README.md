@@ -6,6 +6,7 @@
 [![Contract](https://img.shields.io/badge/Contract-Sepolia-627EEA?style=for-the-badge&logo=ethereum)](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4)
 [![Verified](https://img.shields.io/badge/Etherscan-Verified-2ECC71?style=for-the-badge)](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4#code)
 [![Tests](https://img.shields.io/badge/Tests-98%20passing-2ECC71?style=for-the-badge)](#testing)
+[![Tests](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/test.yml/badge.svg)](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/test.yml)
 
 **Live:** https://raffle-mod.netlify.app/
 **Contract:** [`0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4`](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4)
