@@ -2,13 +2,13 @@
 
 > A production-grade, fully decentralized lottery built on Ethereum Sepolia, powered by **Chainlink VRF v2.5** for verifiable randomness and **Chainlink Automation** for trustless, automatic draws — no server, no admin intervention.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-netlify-00C7B7?style=for-the-badge&logo=netlify)](https://raffle-mod.netlify.app/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel)](https://raffle-mod.vercel.app/)
 [![Contract](https://img.shields.io/badge/Contract-Sepolia-627EEA?style=for-the-badge&logo=ethereum)](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4)
 [![Verified](https://img.shields.io/badge/Etherscan-Verified-2ECC71?style=for-the-badge)](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4#code)
-[![Tests](https://img.shields.io/badge/Tests-98%20passing-2ECC71?style=for-the-badge)](#testing)
-[![Tests](https://github.com/GOLIBJON-developer/lottery/actions/workflows/test.yml/badge.svg)](https://github.com/GOLIBJON-developer/lottery/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/badge/Tests-101%20passing-2ECC71?style=for-the-badge)](#testing)
+[![CI](https://github.com/GOLIBJON-developer/Lottery/actions/workflows/test.yml/badge.svg)](https://github.com/GOLIBJON-developer/Lottery/actions/workflows/test.yml)
 
-**Live:** https://raffle-mod.netlify.app/                              https://raffle-mod.vercel.app/
+**Live:** https://raffle-mod.vercel.app
 **Contract:** [`0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4`](https://sepolia.etherscan.io/address/0xc2cb8835769662d48E31A4272Bfde1A2530DD9b4)
 
 ---
@@ -23,30 +23,66 @@
 ![Owner UI](img/ui-owner.jpg)
 *When the deployer wallet is connected, a third column appears with full administrative controls: pause, cancel, fee configuration, and emergency tools.*
 
+### Test Coverage
+![Test Coverage](img/coverage.jpg)
+*101 tests across unit, fuzz, and integration suites — all passing.*
+
 ---
 
 ## Table of Contents
 
+- [What It Does](#what-it-does)
+- [Why I Built This](#why-i-built-this)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
 - [Smart Contract](#smart-contract)
   - [Deployed Address](#deployed-address)
   - [Features](#features)
   - [Functions Reference](#functions-reference)
+  - [Bug Fixes Applied](#bug-fixes-applied)
   - [Gas Optimized Version](#gas-optimized-version)
 - [Frontend](#frontend)
   - [Player Features](#player-features)
   - [Owner Features](#owner-features)
+  - [Implementation Notes](#implementation-notes)
 - [Testing](#testing)
   - [Test Coverage](#test-coverage)
   - [Running Tests](#running-tests)
+- [CI / CD](#ci--cd)
 - [Local Development](#local-development)
 - [Deployment Guide](#deployment-guide)
-  - [Smart Contract](#smart-contract-deployment)
-  - [Frontend](#frontend-deployment)
 - [Project Structure](#project-structure)
+- [Known Issues and Limitations](#known-issues-and-limitations)
+- [Lessons Learned](#lessons-learned)
 - [Security](#security)
 - [Tech Stack](#tech-stack)
+
+---
+
+## What It Does
+
+Raffle is a trustless on-chain lottery where:
+
+1. Players pay a fixed ETH entrance fee to join the current round
+2. After a configurable interval, **Chainlink Automation** automatically triggers the draw
+3. **Chainlink VRF** generates a cryptographically verifiable random number on-chain
+4. The winner is selected — no one can predict or influence the outcome
+5. Winner calls `claimWinnings()` to receive ETH (pull-payment pattern)
+
+There is no centralized server. There is no admin button to pick a winner manually. The smart contract enforces every rule.
+
+---
+
+## Why I Built This
+
+I built this project to go beyond simple token contracts and understand how real decentralized applications work end-to-end: how oracle networks integrate with smart contracts, how to handle asynchronous VRF callbacks securely, how to write production-grade tests with Foundry, and how to build a frontend that reads live blockchain state.
+
+The specific problems I wanted to solve:
+
+- **Verifiable randomness** — `block.timestamp` and `blockhash` can be influenced by validators. Chainlink VRF cannot.
+- **Trustless automation** — a centralized cron job is a single point of failure. Chainlink Automation is decentralized.
+- **Security patterns** — pull payments, CEI pattern, reentrancy guards, emergency mechanisms with bounded access.
+- **Real bugs, real fixes** — after initial implementation I audited the contract myself and found 7 logic issues (documented in [Bug Fixes Applied](#bug-fixes-applied)).
 
 ---
 
@@ -54,15 +90,15 @@
 
 ```
 1. Players call enterRaffle() paying the entrance fee in ETH
-         ↓
+         |
 2. Chainlink Automation monitors checkUpkeep() every block
-         ↓
+         |
 3. When interval passes and conditions are met, performUpkeep() is triggered
-         ↓
+         |
 4. A Chainlink VRF request is sent — a verifiably random number is returned
-         ↓
+         |
 5. fulfillRandomWords() selects the winner, credits winnings (pull pattern)
-         ↓
+         |
 6. Winner calls claimWinnings() to receive ETH
 ```
 
@@ -81,27 +117,34 @@
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│              Next.js Frontend                    │
-│   Wagmi v2 · Viem · RainbowKit                  │
-│                                                  │
-│  RaffleApp ──► RaffleCard  OwnerPanel           │
-│           ──► WinnersList  UserStatus           │
-│  hooks: useRaffleData · useRaffleWrite           │
-└───────────────────┬──────────────────────────────┘
-                    │  read / write
-┌───────────────────▼──────────────────────────────┐
-│              Raffle.sol  (Sepolia)               │
-│                                                  │
-│  enterRaffle()   checkUpkeep()   claimWinnings() │
-│  performUpkeep() cancelRaffle()  emergencyWithdraw│
-│  fulfillRandomWords()  (VRF callback)            │
-└──────────┬──────────────────────┬────────────────┘
-           │                      │
-┌──────────▼──────┐   ┌───────────▼──────────────┐
-│ Chainlink VRF   │   │  Chainlink Automation     │
-│ v2.5 (random)   │   │  (automatic draw trigger) │
-└─────────────────┘   └──────────────────────────┘
++--------------------------------------------------+
+|              Next.js 14 Frontend                 |
+|   Wagmi v2  Viem  RainbowKit  TanStack Query     |
+|                                                  |
+|  RaffleApp (orchestrator)                        |
+|  +-- RaffleCard    enter, pot, claim             |
+|  +-- OwnerPanel    admin controls (owner only)   |
+|  +-- WinnersList   live + historical winners     |
+|  +-- UserStatus    connected wallet status       |
+|  +-- ContractStats on-chain stats                |
+|                                                  |
+|  useRaffleData   15 reads batched, 12s polling   |
+|  useRaffleWrite  write + confirmation + toast    |
++------------------+-------------------------------+
+                   |  JSON-RPC
++------------------v-------------------------------+
+|              Raffle.sol  (Sepolia)               |
+|                                                  |
+|  enterRaffle()   checkUpkeep()   claimWinnings() |
+|  performUpkeep() cancelRaffle()  emergencyWithdraw|
+|  fulfillRandomWords()  <-- VRF callback          |
++--------+-----------------------+-----------------+
+         |                       |
++--------v---------+  +----------v--------------+
+| Chainlink VRF    |  | Chainlink Automation     |
+| v2.5 verifiable  |  | decentralized upkeep     |
+| randomness       |  | no cron job needed       |
++------------------+  +-------------------------+
 ```
 
 ---
@@ -121,19 +164,19 @@ Contract source is publicly verified on Etherscan — every line of logic is aud
 | # | Feature | Description |
 |---|---|---|
 | 1 | **Pull payment pattern** | Winners call `claimWinnings()` — no ETH push to unknown addresses |
-| 2 | **Prize pot isolation** | `s_currentRoundPot` tracks only the current round's ETH. Previous unclaimed winnings never bleed into the new prize |
+| 2 | **Prize pot isolation** | `s_currentRoundPot` tracks only current round ETH. Previous unclaimed winnings never bleed into the new prize |
 | 3 | **ReentrancyGuard** | CEI pattern + `nonReentrant` modifier as a double safety layer |
 | 4 | **Pause / Unpause** | Owner can halt entries and automation at any time |
 | 5 | **Rich events** | Every action emits an event with full context (amount, roundId, timestamp) |
 | 6 | **Refund mechanism** | `cancelRaffle()` credits all players; they pull refunds via `claimRefund()` |
-| 7 | **MIN_PLAYERS guard** | Draw only triggers with ≥ 2 players |
+| 7 | **MIN_PLAYERS guard** | Draw only triggers with at least 2 players |
 | 8 | **Duplicate entry guard** | `s_hasEntered` mapping — one ticket per address per round |
 | 9 | **Emergency withdraw** | Owner can drain only orphaned ETH; `s_pendingClaims` is always protected |
-| 10 | **Mutable entrance fee** | `setEntranceFee()` — requires pause |
+| 10 | **Mutable entrance fee** | `setEntranceFee()` — requires pause to protect live rounds |
 | 11 | **Winner history** | Full on-chain winner array via `getWinnerHistory()` |
 | 12 | **Protocol fee** | Configurable BPS fee (max 10%) credited to a treasury address |
 | 13 | **Multi-round tracking** | `RoundResult` struct stored per round ID |
-| 14 | **Excess ETH refund** | Overpayments are returned immediately; pot only holds exact entrance fee |
+| 14 | **Excess ETH refund** | Overpayments returned immediately; pot only holds exact entrance fee |
 
 ### Functions Reference
 
@@ -184,23 +227,38 @@ Contract source is publicly verified on Etherscan — every line of logic is aud
 | `hasEntered(address)` | Whether an address entered this round |
 | `isPaused()` | Current pause state |
 
+### Bug Fixes Applied
+
+After initial implementation, a full review identified and fixed 7 logic bugs:
+
+| # | Bug | Impact | Fix |
+|---|---|---|---|
+| 1 | **Prize pot bleed** — `address(this).balance` used as prize | Previous unclaimed winnings added to new round pot — effectively taxing past winners | Introduced `s_currentRoundPot` to track only the current round's collected ETH |
+| 2 | **Cancel deadlock** — `s_hasEntered` not cleared on cancel | All players permanently locked out of future rounds after any cancellation | Added `delete s_hasEntered[player]` inside the cancel refund loop |
+| 3 | **Silent excess ETH kept** — overpayment absorbed into pot | Players sending more than entrance fee lost the extra ETH with no notification | Added immediate refund: `msg.value - entranceFee` returned to sender in `enterRaffle()` |
+| 4 | **No pause guard on config** — `setProtocolFee` / `setTreasury` callable anytime | Owner could change fee % or treasury address mid-round, affecting players who had already entered | All config functions now require `_paused == true` |
+| 5 | **emergencyWithdraw rug risk** — could drain all ETH | Owner could take user winnings and pending refunds | Bounded to `balance - s_pendingClaims` — legitimate user funds always protected |
+| 6 | **CANCELLED state invisible** — immediately reset to OPEN after cancel | State was cosmetic only; checkUpkeep could trigger a new draw on the very next block | State stays CANCELLED until `unpause()` is explicitly called |
+| 7 | **OZ Ownable + Chainlink conflict** — fatal `E6480` compiler error | `VRFConsumerBaseV2Plus` already inherits `ConfirmedOwnerWithProposal` which defines `onlyOwner`, `owner()`, and `OwnershipTransferred` — same symbols as OZ Ownable | Removed OZ Ownable entirely; wrote a minimal `RafflePausable` abstract contract with zero external dependencies |
+
 ### Gas Optimized Version
 
 `src/RaffleGasOptimized.sol` is an alternative implementation with the same logic but storage-packed slots:
 
 ```
-Standard version:   9 storage slots  (9 × 2100 = 18,900 gas cold SLOAD)
-Optimized version:  4 storage slots  (4 × 2100 =  8,400 gas cold SLOAD)
+Standard version:   9 storage slots  (9 x 2,100 = 18,900 gas cold SLOAD)
+Optimized version:  4 storage slots  (4 x 2,100 =  8,400 gas cold SLOAD)
+Reduction:                                         10,500 gas  (55%)
 ```
 
 **Packed layout:**
 
 ```
-Slot A │ s_treasury (20 bytes)    │ s_entranceFee (12 bytes)       │
-Slot B │ s_recentWinner (20 bytes)│ s_lastTimeStamp (4 bytes)      │
-       │ s_protocolFeeBps (2 b)   │ s_raffleState (1 b) │ _paused  │
-Slot C │ s_currentRoundPot (16 b) │ s_pendingClaims (16 bytes)     │
-Slot D │ s_currentRoundId (8 bytes)                                │
+Slot A  s_treasury (20 bytes)      s_entranceFee (12 bytes)
+Slot B  s_recentWinner (20 bytes)  s_lastTimeStamp (4 bytes)
+        s_protocolFeeBps (2 b)     s_raffleState (1 b)  _paused (1 b)
+Slot C  s_currentRoundPot (16 b)   s_pendingClaims (16 bytes)
+Slot D  s_currentRoundId (8 bytes)
 ```
 
 Key savings per function:
@@ -211,13 +269,13 @@ Key savings per function:
 | `enterRaffle()` | ~80,000 gas | ~78,000 gas | **~2,000 gas** |
 | `fulfillRandomWords()` | ~120,000 gas | ~103,000 gas | **~17,000 gas** |
 
-> `checkUpkeep()` is called by Chainlink every block (~7,200× per day). The 4,200 gas saving per call adds up significantly over time.
+> `checkUpkeep()` is called by Chainlink every block (~7,200 times/day). The 4,200 gas saving per call adds up significantly at scale.
 
 ---
 
 ## Frontend
 
-**Live:** [https://raffle-mod.netlify.app](https://raffle-mod.netlify.app)
+**Live:** [https://raffle-mod.vercel.app](https://raffle-mod.vercel.app)
 
 Built with Next.js 14 (App Router), Wagmi v2, Viem, and RainbowKit.
 
@@ -233,14 +291,22 @@ Built with Next.js 14 (App Router), Wagmi v2, Viem, and RainbowKit.
 
 ### Owner Features
 
-Owner panel only renders when the deployer wallet is connected (checked via `raffle.owner()`):
+Owner panel only renders when the deployer wallet is connected (verified against `raffle.owner()` on-chain — no hardcoded address):
 
-- **Pause / Unpause** — single button, state-aware
-- **Cancel Round** — only enabled when paused + OPEN
-- **Set Entrance Fee** — input field, requires pause
-- **Set Protocol Fee** — BPS input with live current value display, requires pause
-- **Set Treasury** — address input, requires pause
+- **Pause / Unpause** — single button, state-aware label
+- **Cancel Round** — only enabled when paused + OPEN state
+- **Set Entrance Fee** — input field with pause warning
+- **Set Protocol Fee** — BPS input with live current value display
+- **Set Treasury** — address input with validation
 - **Emergency Withdraw** — shows protected pending claims amount
+
+### Implementation Notes
+
+- `useReadContracts` batches all 15 contract reads into a single RPC call — one request instead of 15
+- `useWatchContractEvent` subscribes to `WinnerPicked` and `RaffleEnter` for real-time UI updates without polling
+- Owner panel checks `raffle.owner()` on-chain — no hardcoded address in frontend code
+- `isSuccess` side effects are handled in `useEffect` — prevents infinite re-render loop (a common React + Wagmi bug)
+- Explicit Alchemy RPC transport configured in `wagmi.ts` — default thirdweb endpoint blocks CORS from custom domains
 
 ---
 
@@ -248,37 +314,42 @@ Owner panel only renders when the deployer wallet is connected (checked via `raf
 
 ### Test Coverage
 
-![Coverage Report](img/coverage.jpg)
-
-98 unit tests · 8 fuzz tests · 6 integration scenarios
+![Test Coverage](img/coverage.jpg)
 
 ```
-Test Suites:  2
-Tests:        104 total  (98 unit + 6 integration)
-Fuzz runs:    1000 per fuzz test
-Status:       All passing ✅
+Total:       101 tests
+Unit:         95 tests (including 8 fuzz properties)
+Integration:   6 end-to-end scenarios
+Fuzz runs:  1,000 per property
+Result:     All passing
 ```
 
-Coverage highlights:
+### Coverage by Area
 
-| Area | Tests |
-|---|---|
-| Constructor validation | 4 tests |
-| `enterRaffle()` — all revert paths | 7 tests |
-| `checkUpkeep()` — each condition | 7 tests |
-| `performUpkeep()` | 4 tests |
-| `fulfillRandomWords()` — VRF callback | 9 tests |
-| Pull payments (claim / refund) | 8 tests |
-| Pause / Unpause | 5 tests |
-| Cancel + refund flow | 9 tests |
-| Emergency withdraw | 5 tests |
-| Config functions | 8 tests |
-| Fuzz: any EOA can enter | 1000 runs |
-| Fuzz: prize split always correct | 1000 runs |
-| Fuzz: excess always refunded | 1000 runs |
-| Fuzz: pot accounting | 1000 runs |
-| Fuzz: winner always a player | 1000 runs |
-| Integration: full lifecycle | 6 scenarios |
+| Area | Tests | What is verified |
+|---|---|---|
+| Constructor | 4 | All 3 deploy-time validations |
+| `enterRaffle()` | 8 | All revert paths, excess refund, pot accounting, duplicate guard |
+| `checkUpkeep()` | 7 | Each of the 5 conditions tested independently |
+| `performUpkeep()` | 4 | State transition, event emission, access control |
+| `fulfillRandomWords()` | 9 | Winner is always a player, prize split, state reset, history |
+| `claimWinnings()` | 5 | ETH transfer, event, double-claim prevention |
+| `claimRefund()` | 5 | ETH transfer, event, double-claim prevention |
+| Pause / Unpause | 5 | Blocks entry, blocks upkeep, timestamp reset, state |
+| `cancelRaffle()` | 9 | Refunds credited, `hasEntered` cleared, state stays CANCELLED |
+| Emergency withdraw | 5 | Orphaned ETH only, pending claims untouched |
+| Config functions | 8 | All setters update correctly, pause requirement enforced |
+| **Fuzz: any EOA can enter** | 1,000 | Random valid addresses |
+| **Fuzz: prize split always correct** | 1,000 | `prize + fee == pot` for all BPS values 0–1000 |
+| **Fuzz: excess always refunded** | 1,000 | Any overpayment fully returned |
+| **Fuzz: pot accounting** | 1,000 | Pot always equals sum of entrance fees |
+| **Fuzz: winner is always a player** | 1,000 | Random seed — winner always in the entered list |
+| Integration: full round | 1 | Enter → draw → VRF → win → claim end-to-end |
+| Integration: cancel + refund | 1 | Pause → cancel → refund → re-enter next round |
+| Integration: 3 consecutive rounds | 1 | Pot isolation, history, round ID correctness |
+| Integration: pot isolation | 1 | Unclaimed prizes never bleed into subsequent rounds |
+| Integration: config update | 1 | Pause → change fee → unpause → new round at new fee |
+| Integration: emergency withdraw | 1 | Protected pending claims, orphaned ETH only |
 
 ### Running Tests
 
@@ -298,7 +369,24 @@ forge test --gas-report
 # Coverage (requires lcov: brew install lcov)
 forge coverage --report lcov
 genhtml lcov.info --branch-coverage --output-dir coverage/
+open coverage/index.html
 ```
+
+---
+
+## CI / CD
+
+GitHub Actions runs automatically on every push and pull request to `main`:
+
+```
+Install Foundry
+forge install
+forge build --sizes
+forge test -v
+forge snapshot  (gas baseline saved as artifact)
+```
+
+The CI badge at the top of this README reflects the latest run status.
 
 ---
 
@@ -308,14 +396,14 @@ genhtml lcov.info --branch-coverage --output-dir coverage/
 
 - [Node.js 20+](https://nodejs.org)
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- Sepolia ETH + LINK ([faucets.chain.link](https://faucets.chain.link))
+- Sepolia ETH + LINK from [faucets.chain.link](https://faucets.chain.link)
 - [WalletConnect Cloud](https://cloud.walletconnect.com) project ID
 
 ### Setup
 
 ```bash
-git clone https://github.com/GOLIBJON-developer/lottery
-cd raffle
+git clone https://github.com/GOLIBJON-developer/Lottery
+cd lottery
 
 # Foundry dependencies
 forge install
@@ -331,15 +419,14 @@ npm install
 # Terminal 1 — local chain
 anvil
 
-# Terminal 2 — deploy to anvil
+# Terminal 2 — deploy to Anvil
 forge script script/DeployRaffle.s.sol --broadcast
 
 # Terminal 3 — frontend
 cd raffle-ui
 npm run dev
+# Open http://localhost:3000
 ```
-
-Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
@@ -365,7 +452,7 @@ SUBSCRIPTION_ID=0
 
 ### Smart Contract Deployment
 
-Deployment uses a **two-step** process because `createSubscription()` generates the subscription ID using `blockhash` — it differs between Foundry's local dry-run and the actual on-chain execution. Splitting the steps eliminates the mismatch.
+Deployment uses a **two-step** process because `createSubscription()` generates the subscription ID using `blockhash` — it differs between Foundry's local dry-run and the actual on-chain execution. Splitting the steps eliminates this mismatch.
 
 **Step 1 — Create VRF subscription**
 
@@ -404,116 +491,176 @@ export const RAFFLE_ADDRESS = "0xYourDeployedAddress" as const
 
 ### Frontend Deployment
 
-**Netlify (recommended)**
-
-```bash
-cd raffle-ui
-npm run build   # verify no errors first
-
-# Via Netlify CLI
-npx netlify-cli deploy --prod --dir=.next
-```
-
-Or connect the repo to Netlify:
-1. Import repo at [app.netlify.com](https://app.netlify.com)
-2. Set **Base directory** to `raffle-ui`
-3. Set **Build command** to `npm run build`
-4. Add env var: `NEXT_PUBLIC_WALLETCONNECT_ID`
-
-**Vercel**
+**Vercel (recommended)**
 
 ```bash
 cd raffle-ui
 npx vercel --prod
+# Set NEXT_PUBLIC_WALLETCONNECT_ID in Vercel project settings
 ```
+
+Or connect the repo at [vercel.com/new](https://vercel.com/new):
+1. Set **Root Directory** to `raffle-ui`
+2. Add env var: `NEXT_PUBLIC_WALLETCONNECT_ID`
 
 ---
 
 ## Project Structure
 
 ```
-raffle/
-├── src/
-│   └── Raffle.sol                  Main contract (14 features)
-│
-├── script/
-│   ├── CreateSubscription.s.sol    Step 1 of deploy
-│   ├── DeployRaffle.s.sol          Step 2 of deploy
-│   ├── HelperConfig.s.sol          Network config (Anvil / Sepolia)
-│   └── Interactions.s.sol          Manual helpers
-│
-├── test/
-│   ├── unit/
-│   │   └── RaffleTest.t.sol        98 unit + fuzz tests
-│   ├── integration/
-│   │   └── RaffleIntegrationTest.t.sol   6 lifecycle scenarios
-│   └── mocks/
-│       ├── VRFCoordinatorV2_5Mock.sol
-│       └── LinkToken.sol
-│
-├── raffle-ui/                      Next.js 14 frontend
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   ├── providers.tsx           Wagmi + RainbowKit
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── RaffleApp.tsx           Root orchestrator
-│   │   ├── raffle/
-│   │   │   ├── RaffleCard.tsx      Pot, enter, claim
-│   │   │   ├── OwnerPanel.tsx      Admin controls
-│   │   │   ├── WinnersList.tsx     Live + history feed
-│   │   │   ├── UserStatus.tsx      My wallet status
-│   │   │   ├── ContractStats.tsx   On-chain stats
-│   │   │   └── StatusBadge.tsx     OPEN / PAUSED badge
-│   │   └── ui/
-│   │       ├── Toast.tsx
-│   │       ├── Divider.tsx
-│   │       └── StatRow.tsx
-│   ├── hooks/
-│   │   ├── useRaffleData.ts        Batched contract reads
-│   │   └── useRaffleWrite.ts       Write + confirmation
-│   └── lib/
-│       ├── contract.ts             ABI + address
-│       ├── wagmi.ts                Config
-│       └── utils.ts                Shared helpers
-│
-├── foundry.toml
-├── Makefile
-└── README.md
+lottery/
+|
++-- src/
+|   +-- Raffle.sol                    Main contract (14 features, 7 bugs fixed)
+|   +-- RaffleGasOptimized.sol        Storage-packed variant (55% fewer cold SLOADs)
+|
++-- script/
+|   +-- CreateSubscription.s.sol      Deploy step 1 (VRF subscription)
+|   +-- DeployRaffle.s.sol            Deploy step 2 (fund + deploy + consumer + verify)
+|   +-- HelperConfig.s.sol            Network config (Anvil / Sepolia)
+|   +-- Interactions.s.sol            Manual helpers
+|
++-- test/
+|   +-- unit/
+|   |   +-- RaffleTest.t.sol          95 unit + fuzz tests
+|   +-- integration/
+|   |   +-- RaffleIntegrationTest     6 end-to-end scenarios
+|   +-- mocks/
+|       +-- VRFCoordinatorV2_5Mock.sol
+|       +-- LinkToken.sol
+|
++-- raffle-ui/                        Next.js 14 frontend
+|   +-- app/
+|   |   +-- layout.tsx
+|   |   +-- page.tsx
+|   |   +-- providers.tsx             Wagmi + RainbowKit providers
+|   |   +-- globals.css
+|   +-- components/
+|   |   +-- RaffleApp.tsx             Root orchestrator
+|   |   +-- raffle/
+|   |   |   +-- RaffleCard.tsx        Prize pot, enter, claim
+|   |   |   +-- OwnerPanel.tsx        Admin controls
+|   |   |   +-- WinnersList.tsx       Live + history winners
+|   |   |   +-- UserStatus.tsx        Connected wallet status
+|   |   |   +-- ContractStats.tsx     On-chain stats
+|   |   |   +-- StatusBadge.tsx       OPEN / PAUSED / CALCULATING badge
+|   |   +-- ui/
+|   |       +-- Toast.tsx
+|   |       +-- Divider.tsx
+|   |       +-- StatRow.tsx
+|   +-- hooks/
+|   |   +-- useRaffleData.ts          15 reads batched into one RPC call
+|   |   +-- useRaffleWrite.ts         Write + confirmation + toast pattern
+|   +-- lib/
+|       +-- contract.ts               ABI + deployed address
+|       +-- wagmi.ts                  Wagmi config with explicit RPC transport
+|       +-- utils.ts                  Shared formatters and constants
+|
++-- img/
+|   +-- ui-user.jpg
+|   +-- ui-owner.jpg
+|   +-- coverage.jpg
+|
++-- .github/
+|   +-- workflows/
+|       +-- test.yml                  CI: build + test + gas snapshot
+|
++-- foundry.toml
++-- Makefile
++-- README.md
 ```
+
+---
+
+## Known Issues and Limitations
+
+**VRF subscription cost on testnet**
+
+On Sepolia, gas price spikes can cause a single VRF request to cost far more LINK than expected (observed: 162 LINK during a high-congestion period vs the typical ~0.25 LINK on mainnet). This is a testnet-specific behavior. If a VRF request goes pending due to insufficient subscription balance, fund the subscription at [vrf.chain.link](https://vrf.chain.link) — the pending request fulfills automatically.
+
+**No stuck-state recovery function**
+
+If a VRF request expires after 24 hours without fulfillment, the contract gets stuck in `CALCULATING` state with no automated recovery path. A `resetStuckState()` owner function is the planned fix for a v2 deployment.
+
+**Single ticket per address**
+
+One entry per wallet per round. Multiple tickets (more entries = more chances) are not supported — this simplifies accounting and eliminates a class of tracking bugs, but is a feature limitation.
+
+**Modulo bias in winner selection**
+
+```solidity
+uint256 indexOfWinner = randomWords[0] % playerCount;
+```
+
+With Chainlink VRF's 256-bit output, the statistical bias is negligible in practice (less than 0.00001% for 500 players). A rejection-sampling approach would eliminate it entirely.
+
+---
+
+## Lessons Learned
+
+**Chainlink VRF is asynchronous — design for the gap**
+
+`performUpkeep` fires the VRF request. `fulfillRandomWords` is called 2–3 blocks later by the Chainlink node. The intermediate `CALCULATING` state must be handled gracefully — players cannot enter, `checkUpkeep` must return false, and the UI must reflect this. I initially underestimated how much of the contract's complexity lives in managing this asynchronous window.
+
+**Blockhash-based IDs break Foundry's two-phase execution**
+
+`createSubscription()` uses `blockhash(block.number - 1)` to generate the subscription ID. Foundry runs scripts twice: locally to collect transactions, then on a fork for simulation — different blocks, different hashes, different IDs. The locally-captured subscription ID does not exist on the forked state, causing `InvalidSubscription()` errors. The fix was a deliberate two-step deployment process with `--skip-simulation` for the dependency-heavy step.
+
+**Inherited ownership conflicts are a compiler-level problem**
+
+`VRFConsumerBaseV2Plus` inherits `ConfirmedOwnerWithProposal` which already defines `onlyOwner`, `owner()`, and `OwnershipTransferred`. Importing OpenZeppelin's `Ownable` on top produces fatal error E6480 — duplicate symbol definitions. The correct approach is to use Chainlink's built-in ownership and write a minimal custom `Pausable` with no external dependencies.
+
+**Pull payments are not just a pattern — they are necessary for correctness**
+
+If `fulfillRandomWords` tried to push ETH directly to the winner, any winner whose address is a contract without a `receive()` function would revert the entire callback — all players stuck, no draw ever completing. The pull pattern eliminates this failure mode entirely: the contract stores the amount, the winner retrieves it whenever they are ready.
+
+**`if (isSuccess)` inside render causes infinite loops**
+
+Calling `setState` (through `showToast`) inside a component's render body — even conditionally — triggers a re-render, which re-evaluates the condition, which calls `setState` again. This is a subtle and hard-to-debug React error. The fix is always wrapping post-transaction side effects in `useEffect` with the success flag as a dependency.
+
+**`vm.prank` is consumed by external `staticcall`**
+
+`public constant` variables, despite looking like simple in-memory reads, are accessed via an external `staticcall`. This call consumes the active `vm.prank` context in Foundry tests, causing the actual write transaction after it to execute as the wrong address. The fix: always read constants or getter results into local variables before any `vm.prank`.
+
+**CORS fails in production but not in development**
+
+Wagmi's default behavior uses thirdweb's public RPC endpoint. This works fine at `localhost` but thirdweb blocks CORS requests from custom domains in production. Explicitly setting an Alchemy transport in `wagmi.ts` resolves this permanently — it should be the default setup for any frontend deployed to a custom domain.
 
 ---
 
 ## Security
 
-- **No private keys in code** — Foundry keystores (`cast wallet import`) for deployment
-- **Pull payments** — ETH never pushed to unknown addresses inside VRF callback
-- **CEI pattern** — all state changes before balance updates; `ReentrancyGuard` as backup
-- **`emergencyWithdraw` bounded** — `balance - s_pendingClaims` only; user funds are always protected
-- **Config requires pause** — entrance fee, protocol fee, and treasury address can only change while the raffle is paused, preventing mid-round manipulation
-- **3 VRF confirmations** — makes randomness manipulation economically infeasible
-- **Contract verified** — full source code publicly auditable on Etherscan
+| Concern | Mitigation |
+|---|---|
+| Reentrancy | CEI pattern + `nonReentrant` modifier on all ETH-transferring functions |
+| Unsafe ETH push | Pull payment pattern — no `.call{value}` inside VRF callback |
+| Owner rug-pull | `emergencyWithdraw` bounded to `balance - s_pendingClaims` |
+| Mid-round manipulation | All config changes require `pause()` first |
+| Randomness manipulation | Chainlink VRF with 3-block confirmation threshold |
+| Private key exposure | Foundry keystore (`cast wallet import`) — no raw keys in files or environment |
+| Source code trust | Contract verified on Etherscan — publicly auditable |
+| Ownership conflict | OZ Ownable removed — Chainlink's `ConfirmedOwnerWithProposal` used |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Smart Contract | Solidity 0.8.19 |
-| Framework | Foundry (forge, cast, anvil) |
-| Randomness | Chainlink VRF v2.5 |
-| Automation | Chainlink Automation |
-| Access Control | Chainlink ConfirmedOwner |
-| Reentrancy | OpenZeppelin ReentrancyGuard |
-| Frontend | Next.js 14 (App Router) |
-| Language | TypeScript |
-| Ethereum hooks | Wagmi v2 |
-| Ethereum library | Viem |
-| Wallet UI | RainbowKit |
-| State management | TanStack Query |
-| Hosting | Netlify |
+| Layer | Technology | Version |
+|---|---|---|
+| Smart Contract | Solidity | 0.8.19 |
+| Dev Framework | Foundry (forge, cast, anvil) | latest |
+| Randomness Oracle | Chainlink VRF | v2.5 |
+| Automation Oracle | Chainlink Automation | — |
+| Ownership | Chainlink ConfirmedOwnerWithProposal | — |
+| Reentrancy Protection | OpenZeppelin ReentrancyGuard | v4.9.3 |
+| Frontend | Next.js | 14.2.5 |
+| Language | TypeScript | 5 |
+| Ethereum Hooks | Wagmi | v2 |
+| Ethereum Library | Viem | v2 |
+| Wallet UI | RainbowKit | v2 |
+| Server State | TanStack Query | v5 |
+| Hosting | Vercel | — |
+| CI | GitHub Actions | — |
 
 ---
 
@@ -523,4 +670,4 @@ MIT © 2025
 
 ---
 
-*Built as a portfolio project demonstrating production-grade Solidity development, Chainlink oracle integration, security patterns, comprehensive testing, and modern Web3 frontend architecture.*
+*Built to demonstrate production-grade Solidity development, Chainlink oracle integration, security-first smart contract design, comprehensive Foundry testing, and modern Web3 frontend architecture.*
