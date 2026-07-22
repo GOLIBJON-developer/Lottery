@@ -8,7 +8,6 @@ on:
       - 'test/**'
       - 'script/**'
       - 'foundry.toml'
-      - '.github/workflows/foundry-test.yml'
   pull_request:
     branches: [main, master]
     paths:
@@ -41,8 +40,6 @@ jobs:
 
       - name: Gas snapshot
         run: forge snapshot
-        # Note: just generate the snapshot, not --check
-        # (--check requires a committed .gas-snapshot baseline)
 
       - name: Upload gas snapshot
         uses: actions/upload-artifact@v4

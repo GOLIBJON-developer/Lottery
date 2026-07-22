@@ -24,6 +24,8 @@ Hech qanday DNS yoki Ingress sozlab o'tirmasdan, K8s servisining 80-portini komp
 
 ```
 kubectl port-forward service/raffle-ui-service 8080:80
+# Agar ArgoCD 'raffle' namespace'iga deploy qilgan bo'lsa:
+kubectl port-forward service/raffle-ui-service 8081:80 -n raffle
 ```
 
 Endi laptopingiz brauzerida yangi tab ochib kiring:
