@@ -3,7 +3,8 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # 2-Bosqich: builder (O'zgarishsiz qoladi)
 FROM node:20-alpine AS builder
@@ -15,7 +16,8 @@ ARG NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
 ENV NEXT_PUBLIC_SEPOLIA_RPC_URL=$NEXT_PUBLIC_SEPOLIA_RPC_URL
 ENV NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=$NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # 3-Bosqich: runner (YENGILLASHTIRILGAN VARIANT)
 FROM node:20-alpine AS runner
