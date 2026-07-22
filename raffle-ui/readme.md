@@ -8,6 +8,7 @@
        ./raffle-ui
 
 # 1       DOCKER IMG BUILD QILISH CMD
+
 ```
  docker build   --build-arg NEXT_PUBLIC_SEPOLIA_RPC_URL="https://eth-sepolia.g.alchemy.com/v2/<API_KEY>"   --build-arg NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="<WALLET_CONNECT_PROJECT_ID>"   -t golibjon/my-repo:1.0.0 .
  docker run -d --name raffle-ui -p 3000:3000 --restart always golibjon/my-repo:1.0.0
