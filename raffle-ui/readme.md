@@ -1,4 +1,3 @@
-
  GitHub Actions da — .env fayl repo da EMAS
  - name: Docker build
    run: |
