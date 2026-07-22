@@ -437,17 +437,35 @@ npm run dev
 Create `.env` in the project root:
 
 ```env
-# RPC
-SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+# ── RPC endpoints ──────────────────────────────────────────────
+SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/KEY
+MAINNET_RPC_URL=https://eth-mainnet.g.alchemy.com/v2/KEY
 
-# Foundry keystore account name (cast wallet import)
-ACCOUNT=your-keystore-name
+# ── Wallet ─────────────────────────────────────────────────────
+# Option A: private key (never commit the real value!)
+PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
-# Block explorer
-ETHERSCAN_API_KEY=YOUR_KEY
+# Option B: hardware wallet / keystore (recommended for mainnet)
+# ACCOUNT=my-ledger
 
-# Set AFTER Step 1 below
-SUBSCRIPTION_ID=0
+# ── Block explorer ─────────────────────────────────────────────
+ETHERSCAN_API_KEY=ETHERSCAN_API_KEY
+
+# ── Chainlink VRF (Sepolia) ────────────────────────────────────
+# https://docs.chain.link/vrf/v2-5/supported-networks
+VRF_SUBSCRIPTION_ID=VRF_SUBSCRIPTION_ID
+VRF_COORDINATOR=0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B
+VRF_GAS_LANE=0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae
+
+# ── Raffle config ──────────────────────────────────────────────
+ENTRANCE_FEE=10000000000000000   # 0.01 ETH in wei
+INTERVAL=3600                    # 1 hour in seconds
+CALLBACK_GAS_LIMIT=500000
+PROTOCOL_FEE_BPS=200             # 2%
+TREASURY_ADDRESS=WalletAddres
+
+#walletName - "cast wallet import <walletname> --interactive" enter your private key 
+ACCOUNT=WalletName
 ```
 
 ### Smart Contract Deployment
@@ -530,6 +548,8 @@ lottery/
 |       +-- LinkToken.sol
 |
 +-- raffle-ui/                        Next.js 14 frontend
+|   Dockerfile
+|   abi.json
 |   +-- app/
 |   |   +-- layout.tsx
 |   |   +-- page.tsx

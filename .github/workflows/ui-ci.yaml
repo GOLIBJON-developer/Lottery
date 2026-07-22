@@ -1,0 +1,114 @@
+# .github/workflows/ui-ci.yml
+
+# Nega workflow_call: Bu Ansible/Helm/ArgoCD — uchala deploy workflow ham shu bitta buildni qayta yozmasdan chaqiradi. Kod takrorlanmaydi.
+name: UI Build & Push
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: false
+        type: string
+        default: "production"
+    outputs:
+      image_tag:
+        description: "Docker image tag"
+        value: ${{ jobs.build-push.outputs.image_tag }}
+      ecr_registry:
+        description: "ECR registry URL"
+        value: ${{ jobs.build-push.outputs.ecr_registry }}
+
+env:
+  AWS_REGION: us-east-1
+  IMAGE_NAME: raffle-ui
+
+jobs:
+  # ─────────────────────────────────────────
+  # Lint + Build tekshiruvi
+  # ─────────────────────────────────────────
+  test:
+    name: Lint & Build Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: raffle-ui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: raffle-ui/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SEPOLIA_RPC_URL: ${{ secrets.NEXT_PUBLIC_SEPOLIA_RPC_URL }}
+          NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID }}
+
+  # ─────────────────────────────────────────
+  # Docker build & push ECR
+  # ─────────────────────────────────────────
+  build-push:
+    name: Build & Push Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.tag }}
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+
+    permissions:
+      id-token: write     # OIDC uchun — AWS secret key saqlanmaydi
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image tag (git sha)
+        id: vars
+        run: echo "tag=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR login
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: hadolint — Dockerfile tekshirish
+        uses: hadolint/hadolint-action@v3
+        with:
+          dockerfile: raffle-ui/Dockerfile
+          failure-threshold: error
+
+      - name: Docker build
+        working-directory: raffle-ui
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_SEPOLIA_RPC_URL="${{ secrets.NEXT_PUBLIC_SEPOLIA_RPC_URL }}" \
+            --build-arg NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID="${{ secrets.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID }}" \
+            -t $REGISTRY/raffle-ui:$TAG \
+            -t $REGISTRY/raffle-ui:latest \
+            .
+
+      - name: Trivy — image vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/raffle-ui:${{ steps.vars.outputs.tag }}"
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Docker push
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: docker push $REGISTRY/raffle-ui --all-tags

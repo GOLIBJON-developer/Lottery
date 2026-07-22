@@ -33,6 +33,10 @@ install:
 	forge install transmissions11/solmate@v6
 
 # ── Build ────────────────────────────────────────────────────────
+# cast wallet import hamyon_nomi --interactive
+
+wallet-create:
+	cast wallet import golib --interactive
 
 build:
 	forge build
