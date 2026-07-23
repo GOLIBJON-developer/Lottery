@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 jobs:
-  docker:
-    runs-on: ubuntu-latest
+  ci:
+    runs-on: ubuntu-latest  # self-hosted runner ishlatish uchun: self-hosted ga o'zgartiring 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -73,3 +73,32 @@ jobs:
           git add raffle-ui/package.json infra/helmfiles/values.yaml
           git commit -m "chore(release): bump version to ${{ env.NEW_VERSION }} [skip ci]"
           git push
+
+  cd:
+    needs: ci
+    runs-on: self-hosted
+    steps:
+      # 1. ArgoCD CLI yuklab olish (Agar runner'ingizda oldindan o'rnatilmagan bo'lsa)
+      - name: Install ArgoCD CLI
+        run: |
+          if ! command -v argocd &> /dev/null; then
+            echo "ArgoCD CLI topilmadi, o'rnatilmoqda..."
+            curl -sSL -o /tmp/argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+            sudo install -m 555 /tmp/argocd-linux-amd64 /usr/local/bin/argocd
+            rm /tmp/argocd-linux-amd64
+          fi
+
+      # 2. ArgoCD Login va App Sync
+      - name: ArgoCD Sync Application
+        run: |
+          # ArgoCD serverining K8s ichki servisiga ulanamiz
+          argocd login argocd-server.argocd.svc.cluster.local:443 \
+            --insecure \
+            --grpc-web \
+            --username "${{ secrets.ARGOCD_USERNAME }}" \
+            --password "${{ secrets.ARGOCD_PASSWORD }}"
+
+          # Ilovani sync qilamiz va uning Pruned/Healthy bo'lishini kutamiz
+          argocd app sync raffle --async
+          argocd app wait raffle --health
+          

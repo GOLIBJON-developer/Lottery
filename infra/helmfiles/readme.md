@@ -13,7 +13,7 @@ helm upgrade --install raffle-ui . -n default
 Deploy bo'lgach, podlar tayyor holatga kelganini ko'rib olasiz:Bash
 
 ```
-kubectl get pods,svc,ingress
+kubectl get pods,svc,ingress -n raffle
 ```
 
 Eslatma: Podlar statusi 1/1 Running bo'lishini bir necha soniya kuting.
@@ -47,7 +47,7 @@ Barcha yaratilgan resurslarni (Helm release, podlar, servislar va ingress) klast
 Ushbu buyruq Helm chart orqali yaratilgan barcha pod, service va ingress'larni bir martada o'chirib tashlaydi:
 
 ```bash
-helm uninstall raffle-ui -n default
+helm uninstall raffle-ui -n raffle
 
 ```
 
