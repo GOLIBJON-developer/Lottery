@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: raffle
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/GOLIBJON-developer/Lottery.git'
+    targetRevision: HEAD
+    path: 'infra/helmfiles'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: raffle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

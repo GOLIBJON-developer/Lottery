@@ -78,7 +78,10 @@ jobs:
     needs: ci
     runs-on: self-hosted
     steps:
-      # 1. ArgoCD CLI yuklab olish (Agar runner'ingizda oldindan o'rnatilmagan bo'lsa)
+      # 1. Repozitoriyani runner'ga yuklab olamiz (fayllarni o'qish uchun SHART)
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      # 2. ArgoCD CLI yuklab olish (Agar runner'ingizda oldindan o'rnatilmagan bo'lsa)
       - name: Install ArgoCD CLI
         run: |
           if ! command -v argocd &> /dev/null; then
@@ -88,7 +91,12 @@ jobs:
             rm /tmp/argocd-linux-amd64
           fi
 
-      # 2. ArgoCD Login va App Sync
+      # 3. Application yo'q bo'lsa yaratish / bor bo'lsa manifestini update qilish
+      - name: Apply ArgoCD Application Manifest
+        run: |
+          kubectl apply -f infra/argocd/application.yaml
+
+      # 4.ArgoCD Login va App Sync
       - name: ArgoCD Sync Application
         run: |
           # ArgoCD serverining K8s ichki servisiga ulanamiz
