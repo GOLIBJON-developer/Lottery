@@ -2,7 +2,7 @@ name: Raffle UI CI/CD
 
 on:
   push:
-    branches: [main, master]
+    branches: [local-k8s]
     paths:
       - 'raffle-ui/**'
 
