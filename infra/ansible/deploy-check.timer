@@ -1,0 +1,10 @@
+[Unit]
+Description=deploy-check'ni har 2 daqiqada ishga tushirish
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=2min
+Unit=deploy-check.service
+
+[Install]
+WantedBy=timers.target

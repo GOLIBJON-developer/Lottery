@@ -1,0 +1,9 @@
+[Unit]
+Description=ECR'dagi yangi image'ni tekshirish va deploy qilish
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/deploy/deploy-check.sh
+User=root

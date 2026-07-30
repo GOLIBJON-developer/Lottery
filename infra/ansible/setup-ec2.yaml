@@ -1,0 +1,70 @@
+---
+- name: Configure EC2 Server and Deploy Docker Compose Application
+  hosts: aws_ec2
+  become: yes
+  gather_facts: False
+  vars_files:
+    - project-vars
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    # 1. System paketlarini o'rnatish
+    - name: Install Docker and Python PIP
+      yum:
+        name:
+          - docker
+          - python3-pip
+          - awscli
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker daemon is started and enabled
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # 4. User ruxsatlari
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+    - name: Reset SSH connection to apply group changes
+      meta: reset_connection
+
+    - name: Serverda /opt/deploy papkasini yaratish
+      file:
+        path: /opt/deploy
+        state: directory
+        mode: '0755'
+
+    - name: Deploy tekshiruv skriptini serverga nusxalash
+      copy:
+        src: ./deploy-check.sh
+        dest: /opt/deploy/deploy-check.sh
+        mode: '0755'
+
+    - name: systemd service faylini joylashtirish
+      copy:
+        src: ./deploy-check.service
+        dest: /etc/systemd/system/deploy-check.service
+        mode: '0644'
+
+    - name: systemd timer faylini joylashtirish
+      copy:
+        src: ./deploy-check.timer
+        dest: /etc/systemd/system/deploy-check.timer
+        mode: '0644'
+
+    - name: systemd daemon-ni qayta yuklash va timer'ni yoqish
+      systemd:
+        name: deploy-check.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+
+        # ansible-playbook -i inventory_aws_ec2.yaml setup-ec2.yaml

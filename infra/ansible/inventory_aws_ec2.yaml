@@ -1,0 +1,14 @@
+---    # THIS IS DYNAMIC INVENTORY    MEANS THAT DYNAMIC HOSTS FILE 
+plugin: aws_ec2
+regions:
+  - us-east-1   # command just ----- ansible-inventory -i inventory_aws_ec2.yaml --list|graph
+
+# filters:                             # FILTERS SPEC TAG DEPLOYMENT
+#   tag:Name: dev*
+#   instance-state-name: running
+
+# keyed_groups:       # SEPARATES GROUPS EXAMP: DEV   PROD  THEN ATTACH IT ANSIBLE TASK "hosts: dev"
+#  - key: tags
+
+#  ansible-inventory -i inventory_aws_ec2.yaml --list
+#  ansible-inventory -i inventory_aws_ec2.yaml --graph
