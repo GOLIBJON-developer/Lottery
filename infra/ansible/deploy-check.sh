@@ -19,7 +19,7 @@ if [ "$REMOTE_DIGEST" != "$CURRENT_DIGEST" ]; then
   docker pull "$ECR_URL/$REPO:latest"
   docker stop "$CONTAINER" 2>/dev/null || true
   docker rm "$CONTAINER" 2>/dev/null || true
-  docker run -d --name "$CONTAINER" --restart unless-stopped -p 443:3000 "$ECR_URL/$REPO:latest"
+  docker run -d --name "$CONTAINER" --restart unless-stopped -p 3000:3000 "$ECR_URL/$REPO:latest"
 else
   echo "$(date) - o'zgarish yo'q"
 fi
