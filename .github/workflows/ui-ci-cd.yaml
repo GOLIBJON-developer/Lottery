@@ -60,8 +60,8 @@ jobs:
           file: ./raffle-ui/Dockerfile
           push: true
           tags: |
-            ${{ steps.ecr-login.outputs.registry }}/dev-raffle-app:${{ env.NEW_VERSION }}
-            ${{ steps.ecr-login.outputs.registry }}/dev-raffle-app:latest
+            ${{ steps.ecr-login.outputs.registry }}/dev-raffle-repo:${{ env.NEW_VERSION }}
+            ${{ steps.ecr-login.outputs.registry }}/dev-raffle-repo:latest
           build-args: |
             NEXT_PUBLIC_SEPOLIA_RPC_URL=${{ secrets.NEXT_PUBLIC_SEPOLIA_RPC_URL }}
             NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=${{ secrets.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID }}

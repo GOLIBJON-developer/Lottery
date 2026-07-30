@@ -3,8 +3,8 @@ set -euo pipefail
 
 REGION="us-east-1"
 ECR_URL="371726673826.dkr.ecr.us-east-1.amazonaws.com"
-REPO="dev-raffle-app"
-CONTAINER="dev-raffle-app"
+REPO="dev-raffle-repo"
+CONTAINER="dev-raffle-repo"
 
 # Instance IAM role orqali login — static kalit kerak emas, token har safar yangi olinadi
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_URL"
