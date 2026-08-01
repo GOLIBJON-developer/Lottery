@@ -37,7 +37,7 @@ jobs:
           echo "NEW_VERSION=$CLEAN_VER" >> $GITHUB_ENV
           echo "Yangi versiya: $CLEAN_VER"
 
-          # Helm values.yaml faylini yangilash
+          # infra/helmfiles/values.yaml faylidagi 'tag: "..."' qismini yangilaymiz
           sed -i "s/tag: .*/tag: \"$CLEAN_VER\"/" infra/helmfiles/values.yaml
 
       # 2. AWS Credentials (OIDC orqali xavfsiz ulanish)
