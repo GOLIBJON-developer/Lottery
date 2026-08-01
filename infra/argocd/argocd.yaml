@@ -1,0 +1,29 @@
+# argocd.yaml
+redis-ha:
+  enabled: false
+
+controller:
+  replicas: 1
+server:
+  replicas: 1
+repoServer:
+  replicas: 1
+applicationSet:
+  replicas: 1
+
+global:
+  domain: argocd.example.com # Buni o'z domeningizga o'zgartirasiz
+
+# certificate:
+  # enabled: true
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      # AWS dagi Nginx Ingress orqali ArgoCD (gRPC) ga ulanish uchun zarur anotatsiyalar
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    tls: true

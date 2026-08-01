@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/GOLIBJON-developer/Lottery.git'
-    targetRevision: HEAD
+    targetRevision: aws-eks-deploy
     path: 'infra/helmfiles'
   destination:
     server: 'https://kubernetes.default.svc'
