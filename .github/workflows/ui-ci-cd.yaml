@@ -77,6 +77,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git add raffle-ui/package.json
+          git add raffle-ui/package.json infra/helmfiles/values.yaml
           git commit -m "chore(release): bump version to ${{ env.NEW_VERSION }} [skip ci]" || echo "No changes to commit"
           git push
