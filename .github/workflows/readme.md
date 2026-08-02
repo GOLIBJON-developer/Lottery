@@ -152,12 +152,12 @@ menda test holatida bo'lgani uchun branchni ```aws-eks-deploy``` deb berganman v
 #### 2-qadam: ArgoCD orqali Deploy qilish
 
 * ArgoCD avtomatik tarzda (yoki siz ArgoCD UI'ga kirib **Sync** tugmasini bosish orqali) GitHub'dagi yangi o'zgarishni ko'radi.
-* ArgoCD klaster ichida `raffle` nomli namespace ochib, `replicaCount: 2` talab qilganingizdek 2 ta Pod'ni (`ClusterIP` rejimida) ishga tushiradi.
+* ArgoCD klaster ichida `raffle` nomli namespace ochib, `replicaCount: 1` talab qilganingizdek 2 ta Pod'ni (`ClusterIP` rejimida) ishga tushiradi.
 * *Tekshirish uchun terminalda:* `kubectl get pods -n raffle` yozib, podlar `Running` holatida ekanligini ko'rasiz.
 
 #### 3-qadam: Ingress va Domain (Host) sozlamasi
 
-Siz `values.yaml` da quyidagicha yozgansiz:
+Siz `values.yaml` da quyidagicha yozilgan:
 
 ```yaml
 ingress:
@@ -190,16 +190,8 @@ Terminalda klasterga ulanib, Helm relizlarini o'chirib yuboring (bu AWS'dagi NLB
 Bash
 
 
-# 1. Ingress Nginx'ni o'chiramiz (AWS dagi NLB shundan qolgan)
+# 1. To'liq tozalovchi scriptni ishga tushiramiz
 ```
-helm uninstall ingress-nginx -n ingress-nginx
-```
-# 2. ArgoCD'ni o'chiramiz
-```
-helm uninstall argocd -n argocd
-```
-2-qadam: 1-2 daqiqa kutish
-AWS Load Balancer va uning tarmoq interfeyslarini (ENI) to'liq o'chirib bo'lishi uchun biroz vaqt kerak (odatda 60-90 soniya).
-```
-terraform destroy --auto-approve
+cd ../terraform/
+./destroy.sh
 ```

@@ -1,5 +1,5 @@
 provider "aws" {
-    region = "us-east-1"
+  region = "us-east-1"
 }
 
 # vars
@@ -23,25 +23,25 @@ module "myapp-vpc" {
   private_subnets = var.private_subnet_cidr_blocks
   public_subnets  = var.public_subnet_cidr_blocks
 
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  enable_nat_gateway   = true
+  single_nat_gateway   = true
   enable_dns_hostnames = true
   # enable_vpn_gateway = true
 
   tags = {
-    "kubernetes.io/cluster/myapp-eks-cluster"="shared"
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"
     # Terraform = "true"
     # Environment = "dev"
-    }
+  }
 
-  public_subnet_tags ={
-    "kubernetes.io/cluster/myapp-eks-cluster"="shared"
-    "kubernetes.io/role/elb" = 1
+  public_subnet_tags = {
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"
+    "kubernetes.io/role/elb"                  = 1
   }
 
   private_subnet_tags = {
-    "kubernetes.io/cluster/myapp-eks-cluster"="shared"
-    "kubernetes.io/role/internal-elb" = 1
+    "kubernetes.io/cluster/myapp-eks-cluster" = "shared"
+    "kubernetes.io/role/internal-elb"         = 1
 
   }
 }
