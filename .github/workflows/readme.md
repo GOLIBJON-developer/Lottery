@@ -193,5 +193,5 @@ Bash
 # 1. To'liq tozalovchi scriptni ishga tushiramiz
 ```
 cd ../terraform/
-./destroy.sh
+bash destroy.sh
 ```
