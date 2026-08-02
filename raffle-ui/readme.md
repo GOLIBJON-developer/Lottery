@@ -9,6 +9,7 @@ GitHub Actions da — .env fayl repo da EMAS
 
 # 1       DOCKER IMG BUILD QILISH CMD
 
+
 ```
  docker build \
  --build-arg NEXT_PUBLIC_SEPOLIA_RPC_URL="https://eth-sepolia.g.alchemy.com/v2/<API_KEY>" \

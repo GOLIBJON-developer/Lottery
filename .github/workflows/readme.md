@@ -51,7 +51,11 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --set controller.service.type=LoadBalancer \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
 ```
-(O'rnatilgach, kubectl get svc -n ingress-nginx qilsangiz, AWS tomonidan berilgan uzun DNS nomini ko'rasiz).
+(O'rnatilgach, 
+```
+kubectl get svc -n ingress-nginx
+```
+ qilsangiz, AWS tomonidan berilgan uzun DNS nomini ko'rasiz).
 
 
 
@@ -72,6 +76,14 @@ helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f argoc
 ```
 kubectl get ing -n argocd
 ```
+AWS Load Balancer manzilini olish
+Terminalda quyidagi buyruqni ishga tushiring:
+
+```
+kubectl get svc -n ingress-nginx ingress-nginx-controller
+```
+
+
 terganingizda Sizga EXTERNAL-IP ustunida uzun AWS manzili beriladi (masalan: k8s-ingressn-xxx-xxx.elb.us-east-1.amazonaws.com). 
 terminalga yozing
 
@@ -116,3 +128,69 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 kubectl apply -f application.yaml
 ```
 menda test holatida bo'lgani uchun branchni ```aws-eks-deploy``` deb berganman va ```application.yaml``` va ```.github/actions/ui-ci-cd.yaml``` filearida ``branch``larni shunga o'zgartirganman
+
+
+
+#### 1-qadam: GitHub Actions'ni muvaffaqiyatli yakunlash
+
+* Kodni `git push` qiling.
+* GitHub Actions ishga tushib:
+1. `raffle-ui` ni build qiladi va ECR'ga tashlaydi (`raffle-app:0.1.x`).
+2. `infra/helmfiles/values.yaml` dagi tag'ni yangi versiyaga o'zgartiradi va uni GitHub'ga avtomatik commit qiladi.
+
+
+
+#### 2-qadam: ArgoCD orqali Deploy qilish
+
+* ArgoCD avtomatik tarzda (yoki siz ArgoCD UI'ga kirib **Sync** tugmasini bosish orqali) GitHub'dagi yangi o'zgarishni ko'radi.
+* ArgoCD klaster ichida `raffle` nomli namespace ochib, `replicaCount: 2` talab qilganingizdek 2 ta Pod'ni (`ClusterIP` rejimida) ishga tushiradi.
+* *Tekshirish uchun terminalda:* `kubectl get pods -n raffle` yozib, podlar `Running` holatida ekanligini ko'rasiz.
+
+#### 3-qadam: Ingress va Domain (Host) sozlamasi
+
+Siz `values.yaml` da quyidagicha yozgansiz:
+
+```yaml
+ingress:
+  enabled: true
+  className: "nginx"
+  host: raffle.yourdomain.com
+
+```
+
+Brauzerda `[https://raffle.yourdomain.com](https://raffle.yourdomain.com)` deb yozganingizda ilovangiz ochilishi uchun:
+
+1. NGINX Ingress Controller AWS EKS'da ishlayotgan bo'lishi shart (oldingi qadamlarda o'rnatgan edik).
+2. `raffle.yourdomain.com` manzilini o'sha NGINX Load Balancer'ning tashqi IP (External-IP) manziliga bog'lashingiz kerak.
+* *Agar haqiqiy domeningiz bo'lmasa,* xuddi ArgoCD kabi kompyuteringizning `/etc/hosts` fayliga yozib turib sinashingiz mumkin:
+```text
+<NGINX_LOAD_BALANCER_IP>   raffle.yourdomain.com
+
+```
+
+
+
+
+
+Shu qadamlarni bajarsangiz, EKS klasteringizda Web3 Raffle ilovangiz to'liq va xavfsiz ishga tushadi!
+
+
+## Kubernetes resurslarini tozalash
+Terminalda klasterga ulanib, Helm relizlarini o'chirib yuboring (bu AWS'dagi NLB va IP larni avtomatik ravishda bo'shatadi):
+
+Bash
+
+
+# 1. Ingress Nginx'ni o'chiramiz (AWS dagi NLB shundan qolgan)
+```
+helm uninstall ingress-nginx -n ingress-nginx
+```
+# 2. ArgoCD'ni o'chiramiz
+```
+helm uninstall argocd -n argocd
+```
+2-qadam: 1-2 daqiqa kutish
+AWS Load Balancer va uning tarmoq interfeyslarini (ENI) to'liq o'chirib bo'lishi uchun biroz vaqt kerak (odatda 60-90 soniya).
+```
+terraform destroy --auto-approve
+```
