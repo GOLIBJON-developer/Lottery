@@ -123,6 +123,15 @@ Password: Parolni olish uchun terminalda shu buyruqni bering:
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 ```
 
+## Agarda node yetishmovchiligi bo'lsa buni kiriting
+```
+aws eks update-nodegroup-config \
+  --cluster-name myapp-eks-cluster \
+  --nodegroup-name dev-20260802021522809600000015 \
+  --scaling-config minSize=2,desiredSize=3,maxSize=3 \
+  --output json
+  ```
+
 ### ArgoCD Application Manifest (O'zgarishsiz)
 ```
 kubectl apply -f application.yaml
