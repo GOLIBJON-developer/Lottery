@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: 371726673826.dkr.ecr.us-east-1.amazonaws.com/raffle-app
-  tag: "0.1.13"
+  tag: "0.1.14"
   pullPolicy: IfNotPresent
 
 service:
