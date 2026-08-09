@@ -1,139 +1,139 @@
+# Raffle — Local Kubernetes GitOps with an In-Cluster CI Runner
 
----
+A fully local GitOps demo environment: a GitHub Actions **self-hosted runner running as a pod inside the cluster itself** (via Actions Runner Controller) triggers ArgoCD directly over its internal cluster DNS name — no cloud infrastructure, no exposed ArgoCD API, and a runner scoped with least-privilege RBAC rather than cluster-admin.
 
-## 🔐 1. GitHub Secrets (Zaruriy Atrof-muhit O'zgaruvchilari)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-local-326CE5?logo=kubernetes&logoColor=white)
+![ArgoCD](https://img.shields.io/badge/ArgoCD-push--triggered%20sync-EF7B4D?logo=argo&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Hub-2496ED?logo=docker&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 
-Pipeline va ArgoCD integratsiyasi to'g'ri ishlashi uchun repozitoriyangizning **Settings ➔ Secrets and variables ➔ Actions** bo'limiga quyidagi kalitlarni qo'shib oling:
+This is the third deployment strategy for the Raffle dApp, alongside [EKS + ArgoCD (pull-based GitOps)](./README.md) and [EC2 (pull-based, systemd)](./README-EC2.md) — this one runs entirely on a local Kubernetes cluster (kind, minikube, k3d, or Docker Desktop), useful for development, testing the pipeline without cloud cost, or live demos.
 
-| Secret Nomi | Tavsifi |
-| --- | --- |
-| `ARGOCD_USERNAME` | ArgoCD tizimiga kirish logini (`admin`) |
-| `ARGOCD_PASSWORD` | ArgoCD admin paroli |
-| `DOCKERHUB_USERNAME` | DockerHub foydalanuvchi nomi |
-| `DOCKERHUB_TOKEN` | DockerHub Access Token (yoki Parol) |
-| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Web3 Sepolia RPC Node havolasi |
-| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | WalletConnect Loyiha ID-si |
+## Architecture
 
----
+```mermaid
+flowchart TD
+    Dev["Developer\ngit push"] --> CI["GitHub Actions CI\n(cloud-hosted)"]
+    CI --> Build["Build & push image\nto Docker Hub"]
+    CI --> Bump["Bump values.yaml, commit"]
+    Bump --> Schedule["CD job scheduled"]
 
-## 🚀 2. Infratuzilmani Bosqichma-Bosqich O'rnatish
+    subgraph Cluster["Local Kubernetes cluster"]
+        subgraph RunnerNS["actions-runner-system"]
+            Runner["Self-hosted runner pod\n(picks up the CD job)"]
+        end
+        subgraph ArgoNS["argocd"]
+            ArgoServer["ArgoCD server\nargocd-server.argocd.svc.cluster.local"]
+        end
+        subgraph AppNS["raffle"]
+            Pods["Raffle UI Pods"]
+        end
+    end
 
-1. **1-Qadam: Helm Utilitasini O'rnatish:** Ubuntu / Debian paket boshqaruvchisi orqali.
-Tizimingizga rasmiy Helm APT repozitoriyasini qo'shib, o'rnatamiz:
-
-```bash
-HELM_BUILDKITE_APT_KEY_ID="DDF78C3E6EBB2D2CC223C95C62BA89D07698DBC6"
-
-# Kerakli bog'liqliklarni o'rnatish
-sudo apt-get update && sudo apt-get install curl gpg apt-transport-https --yes
-
-# GPG kalitini yuklab olish va tekshirish
-curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey > "${TMPDIR:-/tmp}/helm.gpg"
-
-if [ "$(gpg --show-keys --with-colons "${TMPDIR:-/tmp}/helm.gpg" | awk -F: '$1 == "fpr" {print $10}' | head -n 1)" != "${HELM_BUILDKITE_APT_KEY_ID}" ]; then
-  echo "ERROR: Unexpected Helm APT key ID: potential key compromise"
-  exit 1
-fi
-
-# Repozitoriyani ulash hamda Helm'ni o'rnatish
-cat "${TMPDIR:-/tmp}/helm.gpg" | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-
-sudo apt-get update
-sudo apt-get install helm -y
-
+    Schedule -.->|"polled by"| Runner
+    Runner -->|"argocd app sync\nRBAC-scoped, internal DNS"| ArgoServer
+    ArgoServer -->|"reads infra/helmfiles"| Pods
 ```
 
+### Why this architecture
 
-2. **2-Qadam: ArgoCD Serverni Ishga Tushirish:** Helm Chart orqali K8s ichiga o'rnatish.
-https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+- **ArgoCD's internal address is cluster-only.** `argocd-server.argocd.svc.cluster.local` only resolves from inside the cluster's network — a cloud-hosted GitHub Actions runner can't reach it. Running the runner as a pod in the same cluster (via Actions Runner Controller) solves this without exposing ArgoCD's API to the internet.
+- **Least-privilege RBAC.** Rather than granting the runner's ServiceAccount cluster-admin, `infra/argocd/argocd-role.yaml` scopes it to `get/list/watch/create/update/patch/delete` on `applications` inside the `argocd` namespace only.
+- **Push-triggered, not pull-based.** Unlike the EKS track, CI explicitly calls `argocd app sync` after pushing a new image — useful here for immediate feedback in a local/demo setting rather than waiting on ArgoCD's default polling interval.
 
-ArgoCD repozitoriyasini ulash:
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js, wagmi, viem, RainbowKit |
+| Local cluster | kind / minikube / k3d / Docker Desktop |
+| GitOps / CD | ArgoCD (push-triggered sync) |
+| CI runner | Actions Runner Controller, running in-cluster |
+| CI | GitHub Actions |
+| Registry | Docker Hub |
+
+## Project structure
+
+```
+Lottery/
+├── raffle-ui/
+├── infra/
+│   ├── argocd/
+│   │   ├── argocd.yaml         # ArgoCD Helm values
+│   │   ├── application.yaml    # ArgoCD Application manifest
+│   │   └── argocd-role.yaml    # Scoped RBAC for the in-cluster runner
+│   └── helmfiles/              # App Helm chart values
+└── .github/workflows/
+```
+
+## Prerequisites
+
+- A local Kubernetes cluster (kind, minikube, k3d, or Docker Desktop's built-in cluster)
+- [Helm](https://helm.sh/docs/intro/install/) ≥ 3.x
+- `kubectl`
+- A Docker Hub account
+- A GitHub Personal Access Token with `repo` scope, used only to register the self-hosted runner
+
+## Required GitHub secrets
+
+| Secret | Description |
+|---|---|
+| `ARGOCD_USERNAME` | ArgoCD login (`admin`) |
+| `ARGOCD_PASSWORD` | ArgoCD admin password |
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Sepolia RPC endpoint, embedded at build time |
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | WalletConnect project ID |
+
+## Setup guide
+
+### 1. Install ArgoCD
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update
 
+helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f infra/argocd/argocd.yaml
 ```
 
-Yengillashtirilgan va Ingress sozlangan `argocd.yaml` konfiguratsiya faylini yaratamiz:
-
-```yaml
-redis-ha:
-  enabled: false
-
-controller:
-  replicas: 1
-
-repoServer:
-  replicas: 1
-
-applicationSet:
-  replicas: 1
-
-global:
-  domain: argocd.example.com
-
-certificate:
-  enabled: true
-
-server:
-  replicas: 1
-  ingress:
-    enabled: true
-    ingressClassName: nginx
-    annotations:
-      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
-      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    tls: true
-
-```
-
-Klasterga joylash va mahalliy kirishni sozlash:
+Access it locally via port-forward — this works the same regardless of which local cluster tool you use, with no ingress or load balancer required:
 
 ```bash
-# ArgoCD chartini o'rnatish
-helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f argocd.yaml
-
-# Local port-forwarding orqali bog'lanish
 kubectl port-forward service/argocd-server -n argocd 8080:443
-
 ```
 
-> **Lokal Domenni Birlashtirish:** `/etc/hosts` (Linux/Mac) yoki `C:\Windows\System32\drivers\etc\hosts` (Windows) fayliga quyidagi qatorni qo'shib qo'ying:
-> `127.0.0.1 argocd.example.com`
-
-
-3. **3-Qadam: Actions Runner Controller (ARC) O'rnatish:** Klaster ichida self-hosted runner ishlatish.
-https://github.com/actions/actions-runner-controller  >  quickstart guide
-1. **Cert-Manager o'rnatish:**
+Open `https://localhost:8080` (self-signed certificate — expected, proceed past the browser warning). Log in as `admin`, password:
 
 ```bash
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d; echo
 ```
 
-2. **GitHub PAT (Personal Access Token) yaratish:**
-GitHub `Developer Settings` ➔ `Personal access tokens` bo'limiga o'tib, **`repo`** huquqi bilan yangi PAT yaratib oling.
-3. **ARC Operatorini Helm orqali o'rnatish:**
+### 2. Install Actions Runner Controller
+
+> **Note:** this uses the original `actions.summerwind.dev`-based ARC (`RunnerDeployment`), which is now the **legacy** implementation — it still works, but GitHub's current recommended path is the [`gha-runner-scale-set`](https://github.com/actions/actions-runner-controller/blob/master/docs/gha-runner-scale-set-controller/README.md) Helm chart (`actions.github.com` API group). Worth migrating to for anything beyond a demo/portfolio setup.
 
 ```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+
+Generate a GitHub PAT (`Developer settings → Personal access tokens`, `repo` scope), then install the controller — pass the token via an environment variable rather than pasting it directly into the command, to keep it out of shell history and logs:
+
+```bash
+export GITHUB_PAT="<your PAT>"
+
 helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
 helm repo update
 
 helm upgrade --install --namespace actions-runner-system --create-namespace \
   --set=authSecret.create=true \
-  --set=authSecret.github_token="YOUR_GITHUB_PAT_TOKEN" \
+  --set-string authSecret.github_token="$GITHUB_PAT" \
   --wait actions-runner-controller actions-runner-controller/actions-runner-controller
-
 ```
 
-note:- Replace REPLACE_YOUR_TOKEN_HERE with your PAT that was generated previously.
+Register the runner:
 
-4. **Runner Deployment Manifestini qo'llash:**
-
-```yaml
+```bash
 cat << EOF | kubectl apply -n actions-runner-system -f -
 apiVersion: actions.summerwind.dev/v1alpha1
 kind: RunnerDeployment
@@ -145,140 +145,82 @@ spec:
     spec:
       repository: GOLIBJON-developer/Lottery
 EOF
-
 ```
 
-5. **Tekshirish:**
+Verify:
 
 ```bash
 kubectl get runners -n actions-runner-system
 kubectl get pods -n actions-runner-system
-
 ```
 
+### 3. Scope the runner's RBAC
 
-4. **4-Qadam: ArgoCD CLI Utilitasini O'rnatish:** Terminal orqali boshqarish uchun.
-CLI binar faylini yuklab olib, tizim `PATH`iga o'tkazamiz:
+Grants the runner's ServiceAccount just enough permission to manage `Application` resources in the `argocd` namespace — nothing more:
+
+```bash
+kubectl apply -f infra/argocd/argocd-role.yaml
+```
+
+### 4. Install the ArgoCD CLI (for local troubleshooting)
 
 ```bash
 curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
 sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 rm argocd-linux-amd64
-
 ```
 
+### 5. Configure GitHub repository secrets
 
-5. **5-Qadam: Kubernetes RBAC Sozlash:** Huquqlarni chegaralash (Security).
-GitHub Runner'ining `default` ServiceAccount'i `argocd` namespace'i ichida **Application** resurslarini boshqara olishi uchun `infra/argocd/argocd-role.yaml` faylini qo'llaymiz:
+**Settings → Secrets and variables → Actions**, add the six secrets listed above.
 
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: runner-argocd-app-manager
-  namespace: argocd
-rules:
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: runner-argocd-app-binding
-  namespace: argocd
-subjects:
-  - kind: ServiceAccount
-    name: default
-    namespace: actions-runner-system
-roleRef:
-  kind: Role
-  name: runner-argocd-app-manager
-  apiGroup: rbac.authorization.k8s.io
-
-```
+### 6. Deploy the application
 
 ```bash
-kubectl apply -f infra/argocd/argocd-role.yaml
-
+kubectl apply -f infra/argocd/application.yaml
 ```
 
+### 7. Ship changes
+
+1. Push a change under `raffle-ui/**` on the `local-k8s` branch.
+2. The `ci` job builds the image, pushes it to Docker Hub, bumps `infra/helmfiles/values.yaml`, and commits.
+3. The `cd` job is picked up by the in-cluster runner, which logs into ArgoCD over its internal DNS name and runs `argocd app sync raffle --async` followed by `argocd app wait raffle --health`.
+
+> **Alternative:** the same sync step can be written using the maintained [`argoproj/argocd-action@v2`](https://github.com/argoproj/argocd-action) action instead of the manual CLI install + login shown above — functionally equivalent, less pipeline code to maintain.
+
+## Verifying the deployment
+
+```bash
+kubectl get pods -n raffle
+kubectl get applications -n argocd
+```
+
+## Tearing down
+
+Helm-level cleanup, works regardless of which local cluster tool you're using:
+
+```bash
+helm uninstall argocd -n argocd
+helm uninstall actions-runner-controller -n actions-runner-system
+kubectl delete namespace raffle argocd actions-runner-system
+```
+
+Or remove the entire local cluster in one step — use whichever matches your setup:
+
+```bash
+kind delete cluster
+# or
+minikube delete
+# or
+k3d cluster delete
+```
+
+## Troubleshooting
+
+**Runner never picks up the `cd` job:** check `kubectl get runners -n actions-runner-system` and `kubectl get pods -n actions-runner-system` — a runner stuck outside `Running` usually means the PAT lacks `repo` scope or has expired.
+
+**`argocd login` fails in the CD job:** confirm `ARGOCD_USERNAME`/`ARGOCD_PASSWORD` match the current admin credentials — the password rotates if the ArgoCD admin secret is ever reset.
 
 ---
 
-## 🛠️ 3. GitHub Actions Continuous Deployment (CD) Pipeline
-
-Kliningizdagi `self-hosted` runner orqali ArgoCD-ni tezkor Sync qilishning **2 xil professional usuli**:
-
-### ⭐️ 1-Opsiya: ArgoCD CLI orqali Sync qilish (Tavsiya etiladi)
-
-Xavfsiz va to'g'ridan-to'g'ri K8s ichki tarmog'i (`.svc.cluster.local`) orqali Sync yuborish:
-
-```yaml
-  cd:
-    needs: ci
-    runs-on: self-hosted
-    steps:
-      # 1. ArgoCD CLI mavjudligini tekshirish va o'rnatish
-      - name: Install ArgoCD CLI
-        run: |
-          if ! command -v argocd &> /dev/null; then
-            echo "ArgoCD CLI topilmadi, o'rnatilmoqda..."
-            curl -sSL -o /tmp/argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-            sudo install -m 555 /tmp/argocd-linux-amd64 /usr/local/bin/argocd
-            rm /tmp/argocd-linux-amd64
-          fi
-
-      # 2. ArgoCD Serverga Login bo'lish va Manifestni Sync qilish
-      - name: ArgoCD Sync Application
-        run: |
-          argocd login argocd-server.argocd.svc.cluster.local:443 \
-            --insecure \
-            --grpc-web \
-            --username "${{ secrets.ARGOCD_USERNAME }}" \
-            --password "${{ secrets.ARGOCD_PASSWORD }}"
-
-          # ArgoCD ilovasini darhol sync qilish va Pod'lar sog'lom bo'lishini kutish
-          argocd app sync raffle --async
-          argocd app wait raffle --health
-
-```
-
----
-
-### 2-Opsiya: Tayyor `argocd-action` ishlatish
-
-```yaml
-  cd:
-    needs: ci
-    runs-on: self-hosted
-    steps:
-      - name: ArgoCD App Sync
-        uses: argoproj/argocd-action@v2
-        with:
-          address: "argocd-server.argocd.svc.cluster.local:443"
-          argocd_username: ${{ secrets.ARGOCD_USERNAME }}
-          argocd_password: ${{ secrets.ARGOCD_PASSWORD }}
-          argocd_app_name: raffle
-          flags: --insecure --grpc-web
-
-```
-
----
-
-## 🔄 GitOps Ishlash Mexanizmi (ArgoCD Application Flow)
-
-```
-[ Developer Push ] ➔ [ GitHub Actions CI ] (Build & Push Docker Image / Update Helm Values)
-                                  │
-                                  ▼
-                     [ ArgoCD CLI Trigger (Sync) ]
-                                  │
-                                  ▼
-[ ArgoCD Server ] ◄── Reads ── [ Git Repo (infra/helmfiles) ] ── Deploys ──► [ K8s Cluster (raffle ns) ]
-
-```
-
-1. **CI Job:** Koddagi o'zgarishni ko'radi, Docker image yaratadi va ECR/DockerHub'ga yuklaydi. Sung `values.yaml` dagi image tag'ini yangilab, Git'ga `push` qiladi.
-2. **CD Job:** `argocd app sync` buyrug'i orqali ArgoCD serveriga signal yuboradi.
-3. **ArgoCD Engine:** Git'dagi `infra/helmfiles` papkasini o'qib, `raffle` namespace'iga yangi versiyani **Zero-Downtime** rejimida joylaydi.
+Built by [Golibjon Sultonmurodov](https://github.com/GOLIBJON-developer) as part of a DevOps/Platform Engineering portfolio.
