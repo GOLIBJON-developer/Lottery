@@ -95,7 +95,7 @@ Navigate to the Ansible directory. Ansible uses dynamic inventory to automatical
 ```bash
 cd ../ansible
 # Bir martalik bootstrap skriptini ishga tushirasiz:
-ansible-playbook -i inventory_aws_ec2.yaml setup-ec2.yml
+ansible-playbook -i inventory_aws_ec2.yaml setup-ec2.yaml
 
 ```
 

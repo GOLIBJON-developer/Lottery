@@ -138,6 +138,7 @@ resource "aws_iam_role_policy_attachment" "ecr_power_user" {
 resource "aws_ecr_repository" "myapp_ecr" {
   name                 = "${var.env_prefix}-raffle-repo"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
