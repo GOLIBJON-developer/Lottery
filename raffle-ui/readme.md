@@ -18,6 +18,7 @@ GitHub Actions da — .env fayl repo da EMAS
  
  docker run -d --name raffle-ui -p 3000:3000 --restart always golibjon/my-repo:1.0.0
 ```
+
 docker-compose.yml fayli:
 
 ```
