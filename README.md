@@ -1,57 +1,117 @@
+# Raffle — GitOps Deployment on AWS EKS
 
-### Player View
-![Player UI](img/ui-user.jpg)
-*Any connected wallet can enter the current round, track the prize pot, countdown timer, and claim winnings.*
+Infrastructure and CI/CD pipeline for deploying a Web3 raffle dApp to Amazon EKS using Terraform, GitHub Actions, and ArgoCD (GitOps). A `git push` is the only manual step required to ship a new version to production.
 
-### Owner Dashboard
-![Owner UI](img/ui-owner.jpg)
-*When the deployer wallet is connected, a third column appears with full administrative controls: pause, cancel, fee configuration, and emergency tools.*
+![Terraform](https://img.shields.io/badge/Terraform-EKS%20%7C%20VPC%20%7C%20ECR-844FBA?logo=terraform&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-EKS-326CE5?logo=kubernetes&logoColor=white)
+![ArgoCD](https://img.shields.io/badge/ArgoCD-GitOps-EF7B4D?logo=argo&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ECR-2496ED?logo=docker&logoColor=white)
 
-# Quyida berilgan ishlarni ketma ketlikda bajaring kutilgan natijani olasiz.
-# Required envs 
+## About the app
+
+Raffle is a production-style Web3 lottery dApp built with Next.js on the frontend and a Solidity smart contract using **Chainlink VRF v2.5** for verifiable randomness, covered by a Foundry test suite. This repository covers the **deployment infrastructure** for the frontend — not the contract itself.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Infra["Infrastructure — Terraform"]
+        TF[Terraform] --> VPC["VPC + Public/Private Subnets"]
+        TF --> EKS["EKS Cluster"]
+        TF --> ECR["ECR Repository"]
+        TF --> IAM["GitHub OIDC IAM Role"]
+    end
+
+    subgraph CI["CI — GitHub Actions"]
+        Dev["Developer\ngit push"] --> Build["Build & Push\nDocker Image"]
+        Build --> ECRPush["ECR"]
+        Build --> Bump["Bump image tag\nin values.yaml"]
+        Bump --> Commit["Commit to Git"]
+    end
+
+    subgraph CD["CD — ArgoCD (GitOps)"]
+        Commit --> Detect["ArgoCD detects\nthe change"]
+        Detect --> Sync["Auto-sync to EKS"]
+    end
+
+    subgraph Cluster["EKS Cluster"]
+        Sync --> Ingress["NGINX Ingress\n(AWS NLB)"]
+        Ingress --> Pods["Raffle UI Pods"]
+    end
+
+    User["End User"] --> Ingress
+    ECR -.-> ECRPush
 ```
-AWS_ROLE_ARN_EKS
-NEXT_PUBLIC_SEPOLIA_RPC_URL
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
+
+GitHub Actions never connects to the cluster directly — it only builds the image and updates a manifest in Git. ArgoCD is the only component with write access to the cluster, continuously reconciling it against the state described in Git.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js, wagmi, viem, RainbowKit |
+| Smart contract | Solidity, Chainlink VRF v2.5, Foundry |
+| Containerization | Docker |
+| Infrastructure as Code | Terraform (VPC, EKS, ECR, IAM/OIDC) |
+| Orchestration | Amazon EKS |
+| Package management | Helm |
+| GitOps / CD | ArgoCD |
+| CI | GitHub Actions (OIDC — no long-lived AWS keys) |
+| Ingress | NGINX Ingress Controller (AWS NLB) |
+| Registry | Amazon ECR |
+
+## Project structure
+
+```
+.
+├── raffle-ui/                  # Next.js frontend
+├── infra/
+│   ├── terraform/              # VPC, EKS, ECR, GitHub OIDC IAM role
+│   ├── argocd/                 # ArgoCD Helm values + Application manifest
+│   └── helmfiles/              # Helm values for the app deployment
+└── .github/workflows/          # CI pipeline (build, push, version bump)
 ```
 
-#  Installing Helm and ArgoCD. ArgoCD setups included.
-```
-cd infra/terraform/
+## Prerequisites
+
+- An AWS account with sufficient IAM permissions
+- [Terraform](https://developer.hashicorp.com/terraform/install) ≥ 1.x
+- AWS CLI, configured
+- `kubectl`
+- [Helm](https://helm.sh/docs/intro/install/) ≥ 3.x
+- A fork of this repository with GitHub Actions enabled
+
+## Required GitHub secrets
+
+| Secret | Description |
+|---|---|
+| `AWS_ROLE_ARN_EKS` | IAM role ARN for GitHub OIDC authentication — output of the Terraform apply below |
+| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Sepolia RPC endpoint, embedded at build time |
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | WalletConnect project ID |
+
+## Deployment guide
+
+### 1. Provision infrastructure
+
+```bash
+cd infra/terraform
 terraform apply --auto-approve
 ```
-chiqgan malumotlar asosida kerakli github secrets to'ldiriladi
-AWS_ROLE_ARN_EKS = "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-EKS klasterga ulanish (AWS uchun shart)
-Helm K8s bilan gaplasha olishi uchun avval terminalingizni EKS ga ulashingiz kerak:
-```
-cd ../../
+This creates the VPC, EKS cluster, ECR repository, and the GitHub OIDC IAM role. Copy the `github_actions_role_arn` output into the `AWS_ROLE_ARN_EKS` GitHub secret.
+
+### 2. Connect to the cluster
+
+```bash
 aws eks update-kubeconfig --region us-east-1 --name myapp-eks-cluster
 ```
 
+### 3. Install the NGINX Ingress Controller
 
-#  Installing Helm From Apt (Debian/Ubuntu)
-Members of the Helm community have contributed an Apt package for Debian/Ubuntu. This package is generally up to date. Thanks to Buildkite for hosting the repo.
-```
-HELM_BUILDKITE_APT_KEY_ID="DDF78C3E6EBB2D2CC223C95C62BA89D07698DBC6"
+Provisions an AWS Network Load Balancer for cluster ingress:
 
-sudo apt-get install curl gpg apt-transport-https --yes
-
-curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey > "${TMPDIR:-/tmp}/helm.gpg"
-
-# Ensure that the key ID matches to prevent a repository compromise from establishing an attacker controlled key
-if [ "$(gpg --show-keys --with-colons "${TMPDIR:-/tmp}/helm.gpg" | awk -F: '$1 == "fpr" {print $10}' | head -n 1)" != "${HELM_BUILDKITE_APT_KEY_ID}" ]; then echo "ERROR: Unexpected Helm APT key ID: potential key compromise"; exit 1; fi
-
-cat "${TMPDIR:-/tmp}/helm.gpg" | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
-
-sudo apt-get update
-sudo apt-get install helm
-```
-#  AWS EKS ga Nginx Ingress Controller o'rnatish 
-Siz argocd.yaml da ingressClassName: nginx ishlatyapsiz. Bu EKS da ishlashi uchun avval uni o'rnatamiz. Bu buyruq AWS da avtomatik ravishda Network Load Balancer (NLB) yaratib beradi:
-```
+```bash
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
@@ -60,147 +120,83 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   --set controller.service.type=LoadBalancer \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
 ```
-(O'rnatilgach, 
-```
-kubectl get svc -n ingress-nginx
-```
- qilsangiz, AWS tomonidan berilgan uzun DNS nomini ko'rasiz).
 
+### 4. Install ArgoCD
 
-
-#  Install helm ArgoCD
-https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
-
-# ArgoCD repozitoriyasini qo'shish
-```
+```bash
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo update
-```
 
-#  ArgoCD ni K8s ga o'rnatish (O'zgarishsiz)
-```
-cd infra/argocd/
+cd infra/argocd
 helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f argocd.yaml
 ```
-```
-kubectl get ing -n argocd
-```
-AWS Load Balancer manzilini olish
-Terminalda quyidagi buyruqni ishga tushiring:
 
+Retrieve the initial admin password:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d; echo
 ```
+
+### 5. Point a domain at the ingress
+
+```bash
 kubectl get svc -n ingress-nginx ingress-nginx-controller
 ```
 
-
-terganingizda Sizga EXTERNAL-IP ustunida uzun AWS manzili beriladi (masalan: k8s-ingressn-xxx-xxx.elb.us-east-1.amazonaws.com). 
-terminalga yozing
-
-# Avval AWS manzilining IP'sini bilib oling (terminalda):
-
-```Bash
-
-ping k8s-ingressn-xxx-xxx.elb.us-east-1.amazonaws.com
-```
-
-(Bu sizga bitta IP manzil qaytaradi, masalan: 3.85.x.x)
-
-## Kompyuteringizdagi hosts faylini oching:
-
-Windows: Notepad'ni Administrator huquqi bilan ochib, ```C:\Windows\System32\drivers\etc\hosts``` faylini tahrirlang.
-
-Mac/Linux: ```sudo nano /etc/hosts```
-
-Faylning eng tagiga shu IP va domenni qo'shib saqlang:
-
-```Plaintext
-3.85.x.x  argocd.example.com
-```
-
-###  Brauzerda ochish va Parolni olish
-Endi brauzeringizga kirib, [https://argocd.example.com](https://argocd.example.com) deb yozasiz.
-
-⚠️ Muhim: Brauzer sizga "Your connection is not private" (Ulanishingiz xavfsiz emas) degan qizil xato beradi. Sababi, SSL sertifikati ArgoCD tomonidan avtomatik (self-signed) yaratilgan. Bunga parvo qilmang, "Advanced" -> "Proceed to argocd.example.com" ni bosing.
-
-Tizimga kirish (Login/Password):
-
-Username: ```admin```
-
-Password: Parolni olish uchun terminalda shu buyruqni bering:
+Resolve the returned load balancer hostname to an IP and point your domain(s) at it — `argocd.example.com` for the ArgoCD UI, `raffle.yourdomain.com` for the app. Without a real domain, map the IP locally instead (`/etc/hosts` on macOS/Linux, `C:\Windows\System32\drivers\etc\hosts` on Windows):
 
 ```
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+<LOAD_BALANCER_IP>  argocd.example.com
+<LOAD_BALANCER_IP>  raffle.yourdomain.com
 ```
 
-## Agarda node yetishmovchiligi bo'lsa buni kiriting
-```
-aws eks update-nodegroup-config \
-  --cluster-name myapp-eks-cluster \
-  --nodegroup-name dev-20260802021522809600000015 \
-  --scaling-config minSize=2,desiredSize=3,maxSize=3 \
-  --output json
-  ```
+> ArgoCD's ingress uses a self-signed certificate by default, so browsers will show a security warning on first visit — expected in this setup. For production, issue a real certificate via `cert-manager`.
 
-### ArgoCD Application Manifest (O'zgarishsiz)
-```
-kubectl apply -f application.yaml
-```
-menda test holatida bo'lgani uchun branchni ```aws-eks-deploy``` deb berganman va ```application.yaml``` va ```.github/actions/ui-ci-cd.yaml``` filearida ``branch``larni shunga o'zgartirganman
+### 6. Deploy the application
 
-
-
-#### 1-qadam: GitHub Actions'ni muvaffaqiyatli yakunlash
-
-* Kodni `git push` qiling.
-* GitHub Actions ishga tushib:
-1. `raffle-ui` ni build qiladi va ECR'ga tashlaydi (`raffle-app:0.1.x`).
-2. `infra/helmfiles/values.yaml` dagi tag'ni yangi versiyaga o'zgartiradi va uni GitHub'ga avtomatik commit qiladi.
-
-
-
-#### 2-qadam: ArgoCD orqali Deploy qilish
-
-* ArgoCD avtomatik tarzda (yoki siz ArgoCD UI'ga kirib **Sync** tugmasini bosish orqali) GitHub'dagi yangi o'zgarishni ko'radi.
-* ArgoCD klaster ichida `raffle` nomli namespace ochib, `replicaCount: 1` talab qilganingizdek 2 ta Pod'ni (`ClusterIP` rejimida) ishga tushiradi.
-* *Tekshirish uchun terminalda:* `kubectl get pods -n raffle` yozib, podlar `Running` holatida ekanligini ko'rasiz.
-
-#### 3-qadam: Ingress va Domain (Host) sozlamasi
-
-Siz `values.yaml` da quyidagicha yozilgan:
-
-```yaml
-ingress:
-  enabled: true
-  className: "nginx"
-  host: raffle.yourdomain.com
-
+```bash
+kubectl apply -f infra/argocd/application.yaml
 ```
 
-Brauzerda `[https://raffle.yourdomain.com](https://raffle.yourdomain.com)` deb yozganingizda ilovangiz ochilishi uchun:
+ArgoCD creates the `raffle` namespace and syncs the Helm release defined in `infra/helmfiles`.
 
-1. NGINX Ingress Controller AWS EKS'da ishlayotgan bo'lishi shart (oldingi qadamlarda o'rnatgan edik).
-2. `raffle.yourdomain.com` manzilini o'sha NGINX Load Balancer'ning tashqi IP (External-IP) manziliga bog'lashingiz kerak.
-* *Agar haqiqiy domeningiz bo'lmasa,* xuddi ArgoCD kabi kompyuteringizning `/etc/hosts` fayliga yozib turib sinashingiz mumkin:
-```text
-<NGINX_LOAD_BALANCER_IP>   raffle.yourdomain.com
+### 7. Ship changes
 
+From here on, deployment is fully automated:
+
+1. Push a change under `raffle-ui/**`.
+2. GitHub Actions builds the image, pushes it to ECR, bumps the version, and commits the new tag to `infra/helmfiles/values.yaml`.
+3. ArgoCD detects the change and syncs it to the cluster — no manual deploy step.
+
+## Verifying the deployment
+
+```bash
+kubectl get pods -n raffle
 ```
 
+## Tearing down
 
-
-
-
-Shu qadamlarni bajarsangiz, EKS klasteringizda Web3 Raffle ilovangiz to'liq va xavfsiz ishga tushadi!
-
-
-## Kubernetes resurslarini tozalash
-Terminalda klasterga ulanib, Helm relizlarini o'chirib yuboring (bu AWS'dagi NLB va IP larni avtomatik ravishda bo'shatadi):
-
-Bash
-
-
-# 1. To'liq tozalovchi scriptni ishga tushiramiz
-```
-cd ../terraform/
+```bash
+cd infra/terraform
 bash destroy.sh
 ```
+
+The script uninstalls the ArgoCD and NGINX Ingress Helm releases, waits for AWS to fully release the associated Load Balancer and its network interfaces, and only then runs `terraform destroy` — avoiding the `DependencyViolation` errors that occur when a VPC is destroyed while a Kubernetes-managed Load Balancer still references its subnets.
+
+## Troubleshooting
+
+**Pods stuck `Pending` — node group full:**
+
+```bash
+aws eks update-nodegroup-config \
+  --cluster-name myapp-eks-cluster \
+  --nodegroup-name <your-nodegroup-name> \
+  --scaling-config minSize=2,desiredSize=3,maxSize=3
+```
+
+**ArgoCD sync fails with `context deadline exceeded`:** usually caused by CPU/memory limits on `repoServer` throttling manifest generation. Increase (or remove) `repoServer.resources.limits` in `argocd.yaml` and re-run `helm upgrade`.
+
+---
+
+Built by [Golibjon Sultonmurodov](https://github.com/GOLIBJON-developer) as part of a DevOps/Platform Engineering portfolio.
